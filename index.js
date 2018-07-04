@@ -23,8 +23,10 @@ exports.handler = (event, context, callback) => {
     var dateStartInsightsTimestamp = dateStartInsights.getTime().toString().substring(0, 10);
     var dateEndTimestamp = json.timestamp.toString().substring(0, 10);
     
+    // NR application ID within the json.account_id
     var applicationID = "123456789";
     
+    // generate Slack webhook values
     const payload = JSON.stringify({
         'channel': '#nr_alerts_webhooks',
         'username': 'webhookbot',
@@ -58,16 +60,19 @@ exports.handler = (event, context, callback) => {
                 '&barchart=barchart&filters=%5B%7B%22key%22%3A%22error.class%22%2C%22value%22%3A%22Error%22%2C%22like%22%3Afalse%7D%5D',
         'icon_emoji': ':ghost:',});
     
+    // options for sending to Slack
     const options = {
       hostname: "hooks.slack.com",
       method: "POST",
       path: "/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX",
     };
     
+    // error response body
     var responseBodyErr = {
         "error": "this did not work",
     };
 
+    // error response from call to Slack
     var responseErr = {
         "statusCode": 200,
         "headers": {
@@ -77,6 +82,7 @@ exports.handler = (event, context, callback) => {
         "isBase64Encoded": false
     };
     
+    // send data to Slack
     const req = https.request(options,
         (res) => res.on("data", function (chunk) {
       }));
@@ -84,6 +90,7 @@ exports.handler = (event, context, callback) => {
     req.write(payload);
     req.end();
  
+    // create Lambda response body
     var responseBody = {
         "accountID": json.account_id,
         "timestamp": json.timestamp,
@@ -92,6 +99,7 @@ exports.handler = (event, context, callback) => {
         "dateEndTimestamp": dateEndTimestamp.substring(0,10)
     };
 
+    // create Lambda response
     var response = {
         "statusCode": 200,
         "headers": {
