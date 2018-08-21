@@ -24,7 +24,7 @@ exports.handler = (event, context, callback) => {
     var dateEndTimestamp = json.timestamp.toString().substring(0, 10);
     
     // NR application ID within the json.account_id
-    var applicationID = "123456789";
+    var applicationID = process.env.NR_APP_ID;
     
     // generate Slack webhook values
     const payload = JSON.stringify({
@@ -64,12 +64,12 @@ exports.handler = (event, context, callback) => {
     const options = {
       hostname: "hooks.slack.com",
       method: "POST",
-      path: "/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX",
+      path: process.env.SLACK_WEBHOOCK_PATH,
     };
     
     // error response body
     var responseBodyErr = {
-        "error": "this did not work",
+        "error": "something did not work",
     };
 
     // error response from call to Slack
