@@ -1,4 +1,4 @@
-# NRAlertLambdaWebhook
+# NR Alert Lambda Webhook
 An AWS Lambda function to receive NR alerts, generate new content and send to Slack webhook.
 
 The Lambda function leverages two environment variables:
