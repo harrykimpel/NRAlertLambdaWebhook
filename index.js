@@ -1,10 +1,20 @@
 const https = require('https');
+// Load the AWS SDK for Node.js
+var AWS = require('aws-sdk');
+// Set the region 
+AWS.config.update({region: 'us-west-2'});
+
+// Create the DynamoDB service object
+const ddb = new AWS.DynamoDB({apiVersion: '2012-10-08'});
 
 exports.handler = (event, context, callback) => {
     
     // receive webhook values from NR
     var json = JSON.parse(event.body);
     var targets = json.targets;
+    var targetsType = json.targetsType;
+    console.log('targets id', targets[0].id);
+
     
     var a = new Date(json.timestamp);
     
@@ -23,9 +33,35 @@ exports.handler = (event, context, callback) => {
     var dateStartInsightsTimestamp = dateStartInsights.getTime().toString().substring(0, 10);
     var dateEndTimestamp = json.timestamp.toString().substring(0, 10);
     
+    /* Add item to NRAlertWebhook table */
+    var params = {
+      TableName: 'NRAlertWebhook',
+      Item: {
+        'alert_timestamp' : {S: json.timestamp.toString()},
+        'alert_date' : {S: dateStart.toString()},
+        'alert_condition_id' : {N: json.condition_id.toString()}
+      }
+    };
+    
+    // Call DynamoDB to add the item to the table
+    ddb.putItem(params, function(err, data) {
+      if (err) {
+        console.log("Error", err);
+      } else {
+        console.log("Success", data);
+      }
+    });
+    
     // NR application ID within the json.account_id
     var applicationID = process.env.NR_APP_ID;
     
+    var apmURL = 'https://rpm.newrelic.com/accounts/'+json.account_id+
+                '/applications/'+applicationID+'/filterable_errors#/show//stack_trace?top_facet=transactionUiName&primary_facet=error.class'+
+                '&tw[start]='+dateStartInsightsTimestamp+
+                '&tw[end]='+dateEndTimestamp+
+                '&barchart=barchart&filters=%5B%7B%22key%22%3A%22error.class%22%2C%22value%22%3A%22Error%22%2C%22like%22%3Afalse%7D%5D';
+                
+            
     // generate Slack webhook values
     const payload = JSON.stringify({
         'channel': '#nr_alerts_webhooks',
@@ -53,12 +89,28 @@ exports.handler = (event, context, callback) => {
             ', targets.type: '+json.targetsType+
             ', timestamp: '+json.timestamp+
             ', violation_chart_url: '+json.violation_chart_url+
-            ', https://rpm.newrelic.com/accounts/'+json.account_id+
-                '/applications/'+applicationID+'/filterable_errors#/show//stack_trace?top_facet=transactionUiName&primary_facet=error.class'+
-                '&tw[start]='+dateStartInsightsTimestamp+
-                '&tw[end]='+dateEndTimestamp+
-                '&barchart=barchart&filters=%5B%7B%22key%22%3A%22error.class%22%2C%22value%22%3A%22Error%22%2C%22like%22%3Afalse%7D%5D',
-        'icon_emoji': ':ghost:',});
+            ', release: 1.16'+
+            ', dateStart: '+dateStart.toString()+
+            ', '+apmURL,
+        'icon_emoji': ':ghost:',
+        "attachments": [
+            {
+                "title": "Violation Chart",
+                "image_url": json.violation_chart_url
+            },
+            {
+                "color": "#3AA3E3",
+                "attachment_type": "default",
+                "actions": [
+                    {
+                        "text": "New Relic APM",
+                        "type": "button",
+                        "url": apmURL
+                    }
+                ]
+            }
+        ]
+    });
     
     // options for sending to Slack
     const options = {
