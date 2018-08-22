@@ -9,6 +9,7 @@ const ddb = new AWS.DynamoDB({apiVersion: '2012-10-08'});
 
 var NRQueryResult = "";
 var DDBAlertConditionCountToday = 0;
+var DDBAlertConditionCountYesterday = 0;
 
 var queryInsightsError = function (account, nrql, insightsCbSuccess)
 {
@@ -69,9 +70,13 @@ exports.handler = (event, context, callback) => {
     var min = a.getMinutes();
     var sec = a.getSeconds();
     var time = date + ' ' + month + ' ' + year + ' ' + hour + ':' + min + ':' + sec ;
-    var dateStart = new Date(year, a.getMonth(), date, -1, 0, 0, 0);
+    var dateStart = new Date(year, a.getMonth(), date, -2, 0, 0, 0);
+    //console.log("dateStart: "+dateStart.toString());
+    var dateStartPrevious = dateStart;
+    dateStartPrevious.setDate(dateStartPrevious.getDate()-1);
+    //console.log("dateStartPrevious: "+dateStartPrevious.toString());
     var dateStartTimestamp = dateStart.getTime().toString().substring(0, 10);
-    var dateStartInsights = new Date(year, a.getMonth(), date, a.getHours(), a.getMinutes()-2, 0, 0);
+    var dateStartInsights = new Date(year, a.getMonth(), date, a.getHours(), a.getMinutes()-1, 0, 0);
     var dateStartInsightsTimestamp = dateStartInsights.getTime().toString().substring(0, 10);
     var dateEndTimestamp = json.timestamp.toString().substring(0, 10);
     
@@ -137,6 +142,33 @@ exports.handler = (event, context, callback) => {
             console.log("Error", err);
           } else {
             console.log("Success", data);
+          }
+        });
+        
+        var paramsQueryPrevious = {
+          ExpressionAttributeValues: {
+              ":d": {
+                    S: dateStartPrevious.toString()
+                   },
+               ":c": {
+                    N: json.condition_id.toString()
+                   }
+         },
+         FilterExpression: "alert_date = :d and alert_condition_id = :c",
+         ProjectionExpression: 'alert_date, alert_condition_id',
+         TableName: 'NRAlertWebhook'
+        };
+        
+        ddb.scan(paramsQueryPrevious, function(err, data) {
+          if (err) {
+            console.log("Error", err);
+          } else {
+            //console.log("DB query count: "+data.Items.length);
+            DDBAlertConditionCountYesterday = data.Items.length;
+            /*data.Items.forEach(function(element, index, array) {
+              //console.log(element.alert_date.S + " (" + element.alert_condition_id.S + ")");
+              DDBAlertConditionCountToday++;
+            });*/
           }
         });
         
@@ -230,7 +262,8 @@ exports.handler = (event, context, callback) => {
                 'Insights Errors: '+insightsURL+'\n'+
                 'Insights NRQL: '+insightsNRQL+'\n'+
                 'Insights query result: '+NRQueryResult+'\n'+
-                'release: 1.40.13'+'\n'+
+                '# of same errors yesterday: '+DDBAlertConditionCountYesterday+'\n'+
+                'release: 1.40.14'+'\n'+
                 ', account_id: '+json.account_id+
                 ', account_name: '+json.account_name+
                 ', condition_id: '+json.condition_id+
