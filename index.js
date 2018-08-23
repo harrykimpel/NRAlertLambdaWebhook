@@ -12,6 +12,7 @@ var NRQueryResultAppId = "";
 var DDBAlertConditionCountToday = 0;
 var DDBAlertConditionCountYesterday = 0;
 
+// function to retrieve Insights NRQL query result (currently just for facets)
 var queryInsightsError = function (account, nrql, insightsCbSuccess)
 {
   var options = {
@@ -30,14 +31,8 @@ var queryInsightsError = function (account, nrql, insightsCbSuccess)
             res.on("data", function (chunk) {
                 //console.log('BODY: ' + chunk);
                 var insightsQueryResult = chunk.substring(0, chunk.indexOf(',"results":['));
-                //console.log('NRQueryResult1: ' + NRQueryResult);
                 insightsQueryResult = insightsQueryResult.substring(20, insightsQueryResult.length-1);
-                //console.log('NRQueryResult2: ' + NRQueryResult);
                 insightsCbSuccess(insightsQueryResult);
-            /*(res) => res.on("data", function (chunk) {
-                var NRQueryResult = chunk;
-                //console.log('BODY: ' + chunk);
-                insightsCbSuccess(chunk);*/
             });
     });
     req2.on("error", (error) => { 
@@ -46,6 +41,7 @@ var queryInsightsError = function (account, nrql, insightsCbSuccess)
     req2.end(); 
 };
 
+// main Lambda handler
 exports.handler = (event, context, callback) => {
 
     // receive webhook values from NR
@@ -72,16 +68,14 @@ exports.handler = (event, context, callback) => {
     var sec = a.getSeconds();
     var time = date + ' ' + month + ' ' + year + ' ' + hour + ':' + min + ':' + sec ;
     var dateStart = new Date(year, a.getMonth(), date, -2, 0, 0, 0);
-    //console.log("dateStart: "+dateStart.toString());
     var dateStartPrevious = dateStart;
     dateStartPrevious.setDate(dateStartPrevious.getDate()-1);
-    //console.log("dateStartPrevious: "+dateStartPrevious.toString());
     var dateStartTimestamp = dateStart.getTime().toString().substring(0, 10);
     var dateStartInsights = new Date(year, a.getMonth(), date, a.getHours(), a.getMinutes()-1, 0, 0);
     var dateStartInsightsTimestamp = dateStartInsights.getTime().toString().substring(0, 10);
     var dateEndTimestamp = json.timestamp.toString().substring(0, 10);
     
-    
+    // scan DynamoDB for existing alert today for the given alert condition
     var paramsQuery = {
       ExpressionAttributeValues: {
           ":d": {
@@ -100,16 +94,11 @@ exports.handler = (event, context, callback) => {
       if (err) {
         console.log("Error", err);
       } else {
-        //console.log("DB query count: "+data.Items.length);
         DDBAlertConditionCountToday = data.Items.length;
-        /*data.Items.forEach(function(element, index, array) {
-          //console.log(element.alert_date.S + " (" + element.alert_condition_id.S + ")");
-          DDBAlertConditionCountToday++;
-        });*/
       }
     });
     
-    //console.log("DDBAlertConditionCountToday: "+DDBAlertConditionCountToday);
+    // did we already receive such an alert today (based on condition id)
     if (DDBAlertConditionCountToday > 0)
     {
         console.log("Alert Condition Count Today > 0, nothing to do for me!");
@@ -146,6 +135,7 @@ exports.handler = (event, context, callback) => {
           }
         });
         
+        // retrieve total number of violations from DynamoDB
         var paramsQueryPrevious = {
           ExpressionAttributeValues: {
               ":d": {
@@ -164,12 +154,7 @@ exports.handler = (event, context, callback) => {
           if (err) {
             console.log("Error", err);
           } else {
-            //console.log("DB query count: "+data.Items.length);
             DDBAlertConditionCountYesterday = data.Items.length;
-            /*data.Items.forEach(function(element, index, array) {
-              //console.log(element.alert_date.S + " (" + element.alert_condition_id.S + ")");
-              DDBAlertConditionCountToday++;
-            });*/
           }
         });
         
@@ -185,21 +170,16 @@ exports.handler = (event, context, callback) => {
         
         var insightsURLFacetErrorClass = 'https://insights.newrelic.com/accounts/'+json.account_id+'/query?query='+insightsNRQLFacetErrorClass;
         var insightsURLFacetAppId = 'https://insights.newrelic.com/accounts/'+json.account_id+'/query?query='+insightsNRQLFacetAppId;
-        
-        /*var NRQueryResultPromise = getInsightsErrors (json.account_id, insightsNRQL);
-        NRQueryResultPromise.then(function(result) {
-            NRQueryResult = result;
-            console.log('response from insights 1: '+NRQueryResult);
-        }, function(err) {
-            console.log(err);
-        });
-        console.log('response from insights 2: '+NRQueryResult);*/
+
+        // retrieve Error Class from Insights using NRQL query     
         queryInsightsError (json.account_id, insightsNRQLFacetErrorClass, function(ret) {
                 if (ret) {
                   console.log(`response from insights error class: ${ret}`);
                   NRQueryResultErrorClass = ret;
                 }
               });
+
+        // for NRQL alerts we also need to retrieve APM App Id from Insights using NRQL query
         if (targetsJson.product == "NRQL")
         {
             queryInsightsError (json.account_id, insightsNRQLFacetAppId, function(ret) {
@@ -216,47 +196,10 @@ exports.handler = (event, context, callback) => {
             }
         }
 
+        // is there a better way to wait for the Insights queries to complete?
         setTimeout(() => console.log(".5 seconds passed"), 500);
-        //console.log('response from insights: '+NRQueryResult);
-        /*var optionsNR = {
-          host: 'insights-api.newrelic.com',
-          path: '/v1/accounts/'+json.account_id+'/query?nrql='+insightsNRQL,
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'X-Query-Key': process.env.NR_INSIGHTS_QUERY_KEY
-          }
-      };*/
-    
-      /*https.request(optionsNR, function(res) {
-        console.log('STATUS: ' + res.statusCode);
-        console.log('HEADERS: ' + JSON.stringify(res.headers));
-        res.setEncoding('utf8');
-        res.on('data', function (chunk) {
-              console.log('BODY: ' + chunk);
-              //insightsCb(chunk);
-        }).end();
-      }); */
-        /*const req2 = https.request(optionsNR,
-            (res) => res.on("data", function (chunk) {
-                var NRQueryResult = chunk;
-                //console.log('BODY: ' + chunk);
-          }));
-        req2.on("error", (error) => { 
-            console.log('error: ' + error);
-        });
-        req2.end();*/
-        
-        /*var apmURL = 'https://rpm.newrelic.com/accounts/'+json.account_id+
-                    '/applications/'+applicationID+'/filterable_errors#/show//stack_trace?top_facet=transactionUiName&primary_facet=error.class'+
-                    '&tw[start]='+dateStartInsightsTimestamp+
-                    '&tw[end]='+dateEndTimestamp+
-                    '&barchart=barchart&filters=%5B%7B%22key%22%3A%22error.class%22%2C%22value%22%3A%22Error%22%2C%22like%22%3Afalse%7D%5D';*/
-        /*var apmURL = 'https://rpm.newrelic.com/accounts/'+json.account_id+
-                    '/applications/'+applicationID+'/filterable_errors#/table?top_facet=transactionUiName&primary_facet=error.class'+
-                    '&tw[start]='+dateStartTimestamp+
-                    '&tw[end]='+dateEndTimestamp+
-                    '&barchart=barchart&filters=%5B%7B%22key%22%3A%22error.class%22%2C%22value%22%3A%22Error%22%2C%22like%22%3Afalse%7D%5D';*/
+
+        // create APM URL based on collected information
         var apmURL = 'https://rpm.newrelic.com/accounts/'+json.account_id+'/applications/'+applicationID+'/filterable_errors?tw%5Bstart%5D='+dateStartTimestamp+'&tw[end]='+dateEndTimestamp;
         if (NRQueryResultErrorClass != null &&
             NRQueryResultErrorClass != "")
@@ -276,41 +219,7 @@ exports.handler = (event, context, callback) => {
                 '<'+targetsJson.link+'|'+targetsJson.name+'> triggered <'+conditionUrl+'|'+json.condition_name+'> in <'+json.policy_url+'|'+json.policy_name+'>\n'+
                 '*Threshold*\n'+
                 json.details+'\n'+
-                /*'*NR Insights Query Result Error Class*: '+NRQueryResultErrorClass+'\n'+
-                '*NR Insights Query Result App Id*: '+NRQueryResultAppId+'\n',
-                'dateStart: '+dateStart.toString()+'\n'+
-                'dateStartTimestamp: '+dateStartTimestamp+'\n'+
-                'dateStartInsights: '+dateStartInsights.getTime().toString()+'\n'+
-                'dateStartInsightsTimestamp: '+dateStartInsightsTimestamp+'\n'+
-                'dateEnd: '+a.toString()+'\n'+
-                'dateEndTimestamp: '+dateEndTimestamp+'\n'+
-                'target URL: '+targetsJson.link+'\n'+
-                'APM Errors: '+apmURL+'\n'+
-                'Insights Errors: '+insightsURL+'\n'+
-                'Insights NRQL: '+insightsNRQL+'\n'+
-                'Insights query result: '+NRQueryResult+'\n'+
-                '# of same errors yesterday: '+DDBAlertConditionCountYesterday+'\n'+
-                'release: 1.40.14'+'\n'+
-                ', account_id: '+json.account_id+
-                ', account_name: '+json.account_name+
-                ', condition_id: '+json.condition_id+
-                ', condition_name: '+json.condition_name+
-                ', current_state: '+json.current_state+
-                ', details: '+json.details+
-                ', event_type: '+json.event_type+
-                ', incident_acknowledge_url: '+json.incident_acknowledge_url+
-                ', incident_id: '+json.incident_id+
-                ', incident_url: '+json.incident_url+
-                ', owner: '+json.owner+
-                ', policy_name: '+json.policy_name+
-                ', policy_url: '+json.policy_url+
-                ', runbook_url: '+json.runbook_url+
-                ', severity: '+json.severity+
-                ', targets: '+targets+
-                ', targets.type: '+json.targetsType+
-                ', timestamp: '+json.timestamp+'\n'+
-                ', violation_chart_url: '+json.violation_chart_url,*/
-           // 'icon_emoji': ':ghost:',
+                '*Number of violations received yesterday:* '+DDBAlertConditionCountYesterday+'\n',
             "attachments": [
                 {
                     "title": "Violation Chart",
