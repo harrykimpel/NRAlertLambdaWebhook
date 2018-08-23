@@ -98,8 +98,12 @@ exports.handler = (event, context, callback) => {
       }
     });
     
+    var DAILY_SLACK_MSGS_RESTRICT = process.env.DAILY_SLACK_MSGS_RESTRICT;
+    var DAILY_SLACK_MSGS_MAX = parseInt(process.env.DAILY_SLACK_MSGS_MAX, 10);
+    
     // did we already receive such an alert today (based on condition id)
-    if (DDBAlertConditionCountToday > 0)
+    if (DAILY_SLACK_MSGS_RESTRICT == "true" &&
+        DDBAlertConditionCountToday >= DAILY_SLACK_MSGS_MAX)
     {
         console.log("Alert Condition Count Today > 0, nothing to do for me!");
         // create Lambda response
