@@ -11,3 +11,7 @@ The Lambda function leverages two environment variables:
           - alert_timestamp (KEY), S
           - alert_date, S
           - alert_condition_id, N
+          
+4. DAILY_SLACK_MSGS_RESTRICT: true/false, specifies whether you want to restrict the number of alerts being sent to Slack on a daily basis
+
+5. DAILY_SLACK_MSGS_MAX: the number of alerts you want to see in Slack on a daily basis
