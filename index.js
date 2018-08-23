@@ -1,4 +1,3 @@
-// Load HTTPS module for Insights querying purposes
 const https = require('https');
 // Load the AWS SDK for Node.js
 var AWS = require('aws-sdk');
@@ -88,7 +87,7 @@ exports.handler = (event, context, callback) => {
      },
      FilterExpression: "alert_date = :d and alert_condition_id = :c",
      ProjectionExpression: 'alert_date, alert_condition_id',
-     TableName: 'NRAlertWebhook'
+     TableName: process.env.DYNAMO_DB_TABLE_NAME
     };
     
     ddb.scan(paramsQuery, function(err, data) {
@@ -104,7 +103,7 @@ exports.handler = (event, context, callback) => {
     {
         console.log("Alert Condition Count Today > 0, nothing to do for me!");
         // create Lambda response
-        var response = {
+        var responseNoSlack = {
             "statusCode": 200,
             "headers": {
                 "my_header": "my_value"
@@ -113,13 +112,13 @@ exports.handler = (event, context, callback) => {
             "isBase64Encoded": false
         };
         
-        callback(null, response);
+        callback(null, responseNoSlack);
     }
     else
     {
         /* Add item to NRAlertWebhook table */
         var paramsInsert = {
-          TableName: 'NRAlertWebhook',
+          TableName: process.env.DYNAMO_DB_TABLE_NAME,
           Item: {
             'alert_timestamp' : {S: json.timestamp.toString()},
             'alert_date' : {S: dateStart.toString()},
@@ -148,13 +147,14 @@ exports.handler = (event, context, callback) => {
          },
          FilterExpression: "alert_date = :d and alert_condition_id = :c",
          ProjectionExpression: 'alert_date, alert_condition_id',
-         TableName: 'NRAlertWebhook'
+         TableName: process.env.DYNAMO_DB_TABLE_NAME
         };
         
         ddb.scan(paramsQueryPrevious, function(err, data) {
           if (err) {
             console.log("Error", err);
           } else {
+            console.log("previous errors: "+data.Items.length+' from '+dateStartPrevious.toString()+' for '+json.condition_id.toString());
             DDBAlertConditionCountYesterday = data.Items.length;
           }
         });
