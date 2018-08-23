@@ -7,7 +7,8 @@ AWS.config.update({region: 'us-west-2'});
 // Create the DynamoDB service object
 const ddb = new AWS.DynamoDB({apiVersion: '2012-10-08'});
 
-var NRQueryResult = "";
+var NRQueryResultErrorClass = "";
+var NRQueryResultAppId = "";
 var DDBAlertConditionCountToday = 0;
 var DDBAlertConditionCountYesterday = 0;
 
@@ -28,11 +29,11 @@ var queryInsightsError = function (account, nrql, insightsCbSuccess)
             res.setEncoding('utf-8');
             res.on("data", function (chunk) {
                 //console.log('BODY: ' + chunk);
-                var NRQueryResult = chunk.substring(0, chunk.indexOf(',"results":['));
+                var insightsQueryResult = chunk.substring(0, chunk.indexOf(',"results":['));
                 //console.log('NRQueryResult1: ' + NRQueryResult);
-                NRQueryResult = NRQueryResult.substring(20, NRQueryResult.length-1);
+                insightsQueryResult = insightsQueryResult.substring(20, insightsQueryResult.length-1);
                 //console.log('NRQueryResult2: ' + NRQueryResult);
-                insightsCbSuccess(NRQueryResult);
+                insightsCbSuccess(insightsQueryResult);
             /*(res) => res.on("data", function (chunk) {
                 var NRQueryResult = chunk;
                 //console.log('BODY: ' + chunk);
@@ -178,8 +179,12 @@ exports.handler = (event, context, callback) => {
         {
             applicationID = targetsJson.id;
         }
-        var insightsNRQL = 'SELECT%20uniqueCount(%60error.class%60)%20from%20TransactionError%20%20%20SINCE%20'+dateStartInsightsTimestamp+'%20UNTIL%20'+dateEndTimestamp+'%20facet%20%60error.class%60';
-        var insightsURL = 'https://insights.newrelic.com/accounts/'+json.account_id+'/query?query='+insightsNRQL;
+        
+        var insightsNRQLFacetErrorClass = 'SELECT%20uniqueCount(%60error.class%60)%20from%20TransactionError%20%20%20SINCE%20'+dateStartInsightsTimestamp+'%20UNTIL%20'+dateEndTimestamp+'%20facet%20%60error.class%60';
+        var insightsNRQLFacetAppId = 'SELECT%20uniqueCount(%60error.class%60)%20from%20TransactionError%20%20%20SINCE%20'+dateStartInsightsTimestamp+'%20UNTIL%20'+dateEndTimestamp+'%20facet%20appId';
+        
+        var insightsURLFacetErrorClass = 'https://insights.newrelic.com/accounts/'+json.account_id+'/query?query='+insightsNRQLFacetErrorClass;
+        var insightsURLFacetAppId = 'https://insights.newrelic.com/accounts/'+json.account_id+'/query?query='+insightsNRQLFacetAppId;
         
         /*var NRQueryResultPromise = getInsightsErrors (json.account_id, insightsNRQL);
         NRQueryResultPromise.then(function(result) {
@@ -189,12 +194,28 @@ exports.handler = (event, context, callback) => {
             console.log(err);
         });
         console.log('response from insights 2: '+NRQueryResult);*/
-        queryInsightsError (json.account_id, insightsNRQL, function(ret) {
+        queryInsightsError (json.account_id, insightsNRQLFacetErrorClass, function(ret) {
                 if (ret) {
-                  //console.log(`response from insights: ${ret}`);
-                  NRQueryResult = ret;
+                  console.log(`response from insights error class: ${ret}`);
+                  NRQueryResultErrorClass = ret;
                 }
               });
+        if (targetsJson.product == "NRQL")
+        {
+            queryInsightsError (json.account_id, insightsNRQLFacetAppId, function(ret) {
+                if (ret) {
+                  console.log(`response from insights app id: ${ret}`);
+                  NRQueryResultAppId = ret;
+                }
+              });
+              
+            if (NRQueryResultAppId != null &&
+                NRQueryResultAppId != "")
+            {
+                applicationID = NRQueryResultAppId;
+            }
+        }
+
         setTimeout(() => console.log(".5 seconds passed"), 500);
         //console.log('response from insights: '+NRQueryResult);
         /*var optionsNR = {
@@ -237,20 +258,26 @@ exports.handler = (event, context, callback) => {
                     '&tw[end]='+dateEndTimestamp+
                     '&barchart=barchart&filters=%5B%7B%22key%22%3A%22error.class%22%2C%22value%22%3A%22Error%22%2C%22like%22%3Afalse%7D%5D';*/
         var apmURL = 'https://rpm.newrelic.com/accounts/'+json.account_id+'/applications/'+applicationID+'/filterable_errors?tw%5Bstart%5D='+dateStartTimestamp+'&tw[end]='+dateEndTimestamp;
-        if (NRQueryResult != null &&
-            NRQueryResult != "")
+        if (NRQueryResultErrorClass != null &&
+            NRQueryResultErrorClass != "")
         {
-            apmURL = 'https://rpm.newrelic.com/accounts/'+json.account_id+'/applications/'+applicationID+'/filterable_errors?tw%5Bstart%5D='+dateStartTimestamp+'&tw[end]='+dateEndTimestamp+'#/table?top_facet=transactionUiName&primary_facet=error.class&barchart=barchart&filters=%5B%7B%22key%22%3A%22error.class%22%2C%22value%22%3A%22'+NRQueryResult+'%22%2C%22like%22%3Afalse%7D%5D';
+            apmURL = 'https://rpm.newrelic.com/accounts/'+json.account_id+'/applications/'+applicationID+'/filterable_errors?tw%5Bstart%5D='+dateStartTimestamp+'&tw[end]='+dateEndTimestamp+'#/table?top_facet=transactionUiName&primary_facet=error.class&barchart=barchart&filters=%5B%7B%22key%22%3A%22error.class%22%2C%22value%22%3A%22'+NRQueryResultErrorClass+'%22%2C%22like%22%3Afalse%7D%5D';
         }
         
-        var conditionUrl = targetsJson.policy_url + "/conditions/"+targetsJson.condition_id+"/edit";
+        var conditionUrl = json.policy_url + "/conditions/"+targetsJson.condition_id+"/edit";
     
         // generate Slack webhook values
         const payload = JSON.stringify({
             'channel': '#nr_alerts_webhooks',
-            'username': 'webhookbot',
+            'username': 'New Relic Alert',
             'text': 
-                'product: '+targetsJson.product+'\n'+
+                'Product: '+targetsJson.product+'\n'+
+                'Alert Violation for Account: '+json.account_name+'\n'+
+                '<'+targetsJson.link+'|'+targetsJson.name+'> triggered <'+conditionUrl+'|'+json.condition_name+'> in <'+json.policy_url+'|'+json.policy_name+'>\n'+
+                '*Threshold*\n'+
+                json.details+'\n'+
+                /*'*NR Insights Query Result Error Class*: '+NRQueryResultErrorClass+'\n'+
+                '*NR Insights Query Result App Id*: '+NRQueryResultAppId+'\n',
                 'dateStart: '+dateStart.toString()+'\n'+
                 'dateStartTimestamp: '+dateStartTimestamp+'\n'+
                 'dateStartInsights: '+dateStartInsights.getTime().toString()+'\n'+
@@ -282,8 +309,8 @@ exports.handler = (event, context, callback) => {
                 ', targets: '+targets+
                 ', targets.type: '+json.targetsType+
                 ', timestamp: '+json.timestamp+'\n'+
-                ', violation_chart_url: '+json.violation_chart_url,
-            'icon_emoji': ':ghost:',
+                ', violation_chart_url: '+json.violation_chart_url,*/
+           // 'icon_emoji': ':ghost:',
             "attachments": [
                 {
                     "title": "Violation Chart",
@@ -299,9 +326,19 @@ exports.handler = (event, context, callback) => {
                             "url": apmURL
                         },
                         {
+                            "text": "Insights NRQL",
+                            "type": "button",
+                            "url": insightsURLFacetErrorClass
+                        },
+                        {
                             "text": "Edit condition",
                             "type": "button",
                             "url": conditionUrl
+                        },
+                        {
+                            "text": "View incident",
+                            "type": "button",
+                            "url": json.incident_url
                         }
                     ]
                 }
