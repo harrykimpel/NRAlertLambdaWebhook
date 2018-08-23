@@ -1,3 +1,4 @@
+// Load HTTPS module for Insights querying purposes
 const https = require('https');
 // Load the AWS SDK for Node.js
 var AWS = require('aws-sdk');
