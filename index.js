@@ -219,8 +219,8 @@ exports.handler = (event, context, callback) => {
             'channel': '#nr_alerts_webhooks',
             'username': 'New Relic Alert',
             'text': 
-                'Product: '+targetsJson.product+'\n'+
-                'Alert Violation for Account: '+json.account_name+'\n'+
+                '*Product:* '+targetsJson.product+'\n'+
+                '*Alert Violation for Account:* '+json.account_name+'\n'+
                 '<'+targetsJson.link+'|'+targetsJson.name+'> triggered <'+conditionUrl+'|'+json.condition_name+'> in <'+json.policy_url+'|'+json.policy_name+'>\n'+
                 '*Threshold*\n'+
                 json.details+'\n'+
