@@ -98,6 +98,25 @@ exports.handler = (event, context, callback) => {
       }
     });
     
+    /* Add item to NRAlertWebhook table */
+    var paramsInsert = {
+      TableName: process.env.DYNAMO_DB_TABLE_NAME,
+      Item: {
+        'alert_timestamp' : {S: json.timestamp.toString()},
+        'alert_date' : {S: dateStart.toString()},
+        'alert_condition_id' : {N: json.condition_id.toString()}
+      }
+    };
+        
+    // Call DynamoDB to add the item to the table
+    ddb.putItem(paramsInsert, function(err, data) {
+      if (err) {
+        console.log("Error", err);
+      } else {
+        console.log("Success", data);
+      }
+    });
+        
     var DAILY_SLACK_MSGS_RESTRICT = process.env.DAILY_SLACK_MSGS_RESTRICT;
     var DAILY_SLACK_MSGS_MAX = parseInt(process.env.DAILY_SLACK_MSGS_MAX, 10);
     
@@ -120,25 +139,6 @@ exports.handler = (event, context, callback) => {
     }
     else
     {
-        /* Add item to NRAlertWebhook table */
-        var paramsInsert = {
-          TableName: process.env.DYNAMO_DB_TABLE_NAME,
-          Item: {
-            'alert_timestamp' : {S: json.timestamp.toString()},
-            'alert_date' : {S: dateStart.toString()},
-            'alert_condition_id' : {N: json.condition_id.toString()}
-          }
-        };
-        
-        // Call DynamoDB to add the item to the table
-        ddb.putItem(paramsInsert, function(err, data) {
-          if (err) {
-            console.log("Error", err);
-          } else {
-            console.log("Success", data);
-          }
-        });
-        
         // retrieve total number of violations from DynamoDB
         var paramsQueryPrevious = {
           ExpressionAttributeValues: {
